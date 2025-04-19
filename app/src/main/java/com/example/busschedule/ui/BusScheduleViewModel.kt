@@ -52,6 +52,10 @@ class BusScheduleViewModel(private val busScheduleDao: BusScheduleDao): ViewMode
 
     fun getScheduleForByNameDesc(): Flow<List<BusSchedule>> = busScheduleDao.getByStopNameDesc()
 
+    fun searchBusSchedules(query: String): Flow<List<BusSchedule>> {
+        return busScheduleDao.searchByStopName(query)
+    }
+
     companion object {
         val factory : ViewModelProvider.Factory = viewModelFactory {
             initializer {

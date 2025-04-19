@@ -18,9 +18,10 @@ package com.example.busschedule
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
-import com.example.busschedule.ui.BusScheduleApp
-import com.jakewharton.threetenabp.AndroidThreeTen
+import androidx.navigation.compose.rememberNavController
+import com.example.busschedule.ui.Nav
 import com.example.busschedule.ui.theme.BusScheduleTheme
+import com.jakewharton.threetenabp.AndroidThreeTen
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -28,7 +29,8 @@ class MainActivity : ComponentActivity() {
         AndroidThreeTen.init(this)
         setContent {
             BusScheduleTheme {
-                BusScheduleApp()
+                val navController = rememberNavController()
+                Nav(navController)
             }
         }
     }

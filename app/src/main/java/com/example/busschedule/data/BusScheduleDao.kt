@@ -46,7 +46,7 @@ interface BusScheduleDao {
         """
     SELECT * FROM schedule 
     ORDER BY stop_name ASC
-    """
+        """
     )
     fun getByStopNameAsc(): Flow<List<BusSchedule>>
 
@@ -54,7 +54,17 @@ interface BusScheduleDao {
         """
     SELECT * FROM schedule 
     ORDER BY stop_name DESC
-    """
+        """
     )
     fun getByStopNameDesc(): Flow<List<BusSchedule>>
+
+    @Query(
+        """ 
+    SELECT * FROM schedule 
+    WHERE stop_name LIKE '%' 
+    || :searchQuery || '%' ORDER BY arrival_time ASC 
+        """
+    )
+    fun searchByStopName(searchQuery: String): Flow<List<BusSchedule>>
+
 }

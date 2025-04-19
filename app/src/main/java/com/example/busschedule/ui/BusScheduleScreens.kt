@@ -30,20 +30,21 @@ import androidx.compose.foundation.layout.calculateEndPadding
 import androidx.compose.foundation.layout.calculateStartPadding
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.wrapContentSize
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Divider
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -65,6 +66,7 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.navigation.NavHostController
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
@@ -95,39 +97,40 @@ enum class SortOrder {
 
 @Composable
 fun BusScheduleApp(
+    navController: NavHostController,
     viewModel: BusScheduleViewModel = viewModel(factory = BusScheduleViewModel.factory)
 ) {
+    var searchQuery by remember { mutableStateOf("") }
+
     val navController = rememberNavController()
+
     val fullScheduleTitle = stringResource(R.string.full_schedule)
 
     var topAppBarTitle by remember { mutableStateOf("Full Schedule") }
 
     var currentSortOrder by remember { mutableStateOf(SortOrder.BY_TIME_ASC) }
 
-    // Aquí, re-calculamos el flujo con base en el estado de orden
-    val routeScheduleFlow = remember(currentSortOrder) {
-        when (currentSortOrder) {
-            SortOrder.BY_NAME_ASC -> viewModel.getScheduleForByNameAsc()
-            SortOrder.BY_NAME_DESC -> viewModel.getScheduleForByNameDesc()
-            SortOrder.BY_TIME_ASC -> viewModel.getFullSchedule()
-            SortOrder.BY_TIME_DESC -> viewModel.getFullScheduleAlter()
-        }
-    }
-
-    // Ahora el 'collectAsState' está dentro de un Composable, por lo que no habrá error
-    val busSchedules by routeScheduleFlow.collectAsState(emptyList()) // Obtener datos del flujo actual
+    val busSchedules by when (currentSortOrder) {
+        SortOrder.BY_NAME_ASC -> viewModel.getScheduleForByNameAsc()
+        SortOrder.BY_NAME_DESC -> viewModel.getScheduleForByNameDesc()
+        SortOrder.BY_TIME_ASC -> viewModel.getFullSchedule()
+        SortOrder.BY_TIME_DESC -> viewModel.getFullScheduleAlter()
+    }.collectAsState(emptyList())
 
     val onBackHandler = {
         topAppBarTitle = fullScheduleTitle
         navController.navigateUp()
     }
 
+    BackHandler { }
     Scaffold(
         topBar = {
             BusScheduleTopAppBar(
-                title = "$topAppBarTitle",  // Mostrar la hora en el título
+                title = "$topAppBarTitle",
                 canNavigateBack = navController.previousBackStackEntry != null,
-                onBackClick = { onBackHandler() }
+                onBackClick = { onBackHandler() },
+                searchQuery = searchQuery,
+                onSearchQueryChange = { searchQuery = it }
             )
         }
     ) { innerPadding ->
@@ -152,7 +155,8 @@ fun BusScheduleApp(
                     onHeaderTimeClick = {
                         // Cambiar el orden de tiempo cuando se hace clic en el encabezado
                         currentSortOrder = if (currentSortOrder == SortOrder.BY_TIME_ASC) SortOrder.BY_TIME_DESC else SortOrder.BY_TIME_ASC
-                    }
+                    },
+                    searchQuery = searchQuery
                 )
             }
             val busRouteArgument = "busRoute"
@@ -191,6 +195,7 @@ fun FullScheduleScreen(
     onHeaderTimeClick: () -> Unit, // Nuevo parámetro
     modifier: Modifier = Modifier,
     contentPadding: PaddingValues = PaddingValues(0.dp),
+    searchQuery: String
 ) {
     BusScheduleScreen(
         busSchedules = busSchedules,
@@ -234,8 +239,13 @@ fun BusScheduleScreen(
     stopName: String? = null,
     onScheduleClick: ((String) -> Unit)? = null,
     onHeaderNameClick: () -> Unit,
-    onHeaderTimeClick: () -> Unit // Nuevo parámetro para cambiar la lista
+    onHeaderTimeClick: () -> Unit,
+    searchQuery: String = ""
 ) {
+    val filteredSchedules = busSchedules.filter { schedule ->
+        schedule.stopName.contains(searchQuery, ignoreCase = true)
+    }
+
     val stopNameText = if (stopName == null) {
         stringResource(R.string.stop_name)
     } else {
@@ -263,12 +273,12 @@ fun BusScheduleScreen(
             Text(text = stopNameText, modifier = Modifier.clickable { onHeaderNameClick() })
             Text(text = stringResource(R.string.arrival_time), modifier = Modifier.clickable { onHeaderTimeClick() })
         }
-        Divider()
+        HorizontalDivider()
         BusScheduleDetails(
             contentPadding = PaddingValues(
                 bottom = contentPadding.calculateBottomPadding()
             ),
-            busSchedules = busSchedules,
+            busSchedules = filteredSchedules,
             onScheduleClick = onScheduleClick
         )
     }
@@ -445,29 +455,45 @@ fun BusScheduleTopAppBar(
     title: String,
     canNavigateBack: Boolean,
     onBackClick: () -> Unit,
+    searchQuery: String,
+    onSearchQueryChange: (String) -> Unit,
     modifier: Modifier = Modifier
 ) {
-    if (canNavigateBack) {
-        TopAppBar(
-            title = { Text(title) },
-            navigationIcon = {
+    TopAppBar(
+        title = {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text(
+                    text = title,
+                    style = MaterialTheme.typography.titleLarge,
+                    modifier = Modifier.weight(1f)
+                )
+                OutlinedTextField(
+                    value = searchQuery,
+                    onValueChange = onSearchQueryChange,
+                    modifier = Modifier
+                        .width(180.dp)
+                        .padding(start = 8.dp),
+                    placeholder = { Text(text = "") },
+                    singleLine = true
+                )
+            }
+        },
+        navigationIcon = {
+            if (canNavigateBack) {
                 IconButton(onClick = onBackClick) {
                     Icon(
                         imageVector = Icons.Filled.ArrowBack,
-                        contentDescription = stringResource(
-                            R.string.back
-                        )
+                        contentDescription = stringResource(R.string.back)
                     )
                 }
-            },
-            modifier = modifier
-        )
-    } else {
-        TopAppBar(
-            title = { Text(title) },
-            modifier = modifier
-        )
-    }
+            }
+        },
+        modifier = modifier
+    )
 }
 
 @Preview(showBackground = true)
@@ -484,7 +510,8 @@ fun FullScheduleScreenPreview() {
             },
             onScheduleClick = {},
             onHeaderNameClick = {},
-            onHeaderTimeClick = {}
+            onHeaderTimeClick = {},
+            searchQuery = ""
         )
     }
 }
