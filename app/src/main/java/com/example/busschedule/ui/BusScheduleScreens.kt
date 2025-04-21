@@ -82,6 +82,7 @@ import java.util.Calendar
 import java.util.Date
 import java.util.Locale
 import java.util.TimeZone
+import java.util.concurrent.TimeUnit
 
 enum class BusScheduleScreens {
     FullSchedule,
@@ -179,7 +180,8 @@ fun BusScheduleApp(
                     onHeaderTimeClick = {
                         // Cambiar el orden de tiempo cuando se hace clic en el encabezado
                         currentSortOrder = if (currentSortOrder == SortOrder.BY_TIME_ASC) SortOrder.BY_TIME_DESC else SortOrder.BY_TIME_ASC
-                    }
+                    },
+                    searchQuery = searchQuery
                 )
             }
         }
@@ -203,7 +205,8 @@ fun FullScheduleScreen(
         contentPadding = contentPadding,
         modifier = modifier,
         onHeaderNameClick = onHeaderNameClick,
-        onHeaderTimeClick = onHeaderTimeClick // Se pasa la función
+        onHeaderTimeClick = onHeaderTimeClick, // Se pasa la función
+        searchQuery = searchQuery
     )
 }
 
@@ -215,7 +218,8 @@ fun RouteScheduleScreen(
     contentPadding: PaddingValues = PaddingValues(0.dp),
     onBack: () -> Unit = {},
     onHeaderNameClick: () -> Unit,
-    onHeaderTimeClick: () -> Unit // Nuevo parámetro
+    onHeaderTimeClick: () -> Unit, // Nuevo parámetro
+    searchQuery: String
 ) {
     BackHandler { onBack() }
     // Filtrar los horarios solo para la parada seleccionada
@@ -227,7 +231,8 @@ fun RouteScheduleScreen(
         contentPadding = contentPadding,
         stopName = stopName,
         onHeaderNameClick = onHeaderNameClick,
-        onHeaderTimeClick = onHeaderTimeClick // Se pasa la función
+        onHeaderTimeClick = onHeaderTimeClick, // Se pasa la función
+        searchQuery = searchQuery
     )
 }
 
@@ -240,11 +245,11 @@ fun BusScheduleScreen(
     onScheduleClick: ((String) -> Unit)? = null,
     onHeaderNameClick: () -> Unit,
     onHeaderTimeClick: () -> Unit,
-    searchQuery: String = ""
+    searchQuery: String
 ) {
-    val filteredSchedules = busSchedules.filter { schedule ->
-        schedule.stopName.contains(searchQuery, ignoreCase = true)
-    }
+    val filteredSchedules = busSchedules
+        .filter { it.stopName.contains(searchQuery, ignoreCase = true) }
+
 
     val stopNameText = if (stopName == null) {
         stringResource(R.string.stop_name)
@@ -296,9 +301,6 @@ fun BusScheduleDetails(
     var currentTime = LocalTime.now() // Hora actual sin fecha
     val sdf = SimpleDateFormat("HH:mm", Locale.getDefault())
     sdf.timeZone = TimeZone.getDefault() // Asegura que usa la zona horaria del sistema
-    val currentFormattedTime = sdf.format(Date())
-    var selectedStop by remember { mutableStateOf<String?>(null) }
-    var selectedStopSchedules by remember { mutableStateOf<List<BusSchedule>>(emptyList()) }
     var showDialog by remember { mutableStateOf(false) }
     var selectedSchedule by remember { mutableStateOf<BusSchedule?>(null) }
     // Estado mutable para la parada más cercana
@@ -352,18 +354,8 @@ fun BusScheduleDetails(
             key = { busSchedule -> busSchedule.id }
         ) { schedule ->
             val arrivalTimeMillis = schedule.arrivalTimeInMillis * 1000L // Aseguramos que sea en milisegundos
-            val arrivalDate = Date(arrivalTimeMillis)
-            val arrivalCalendar = Calendar.getInstance().apply {
-                time = arrivalDate
-            }
+            val arrivalFormattedTime = getMinutesUntilArrival(arrivalTimeMillis)
 
-            val arrivalHour = arrivalCalendar.get(Calendar.HOUR_OF_DAY) // Hora en 24h
-            val arrivalMinute = arrivalCalendar.get(Calendar.MINUTE) // Minutos
-
-            val arrivalTime = LocalTime.of(arrivalHour, arrivalMinute) // Crear LocalTime con hora y minuto
-            val arrivalFormattedTime = sdf.format(arrivalDate)
-
-            // Comparar solo la hora y los minutos
             val isClosestSchedule = closestSchedule == schedule // Verifica si es la más cercana
 
             Row(
@@ -449,6 +441,32 @@ fun BusScheduleDetails(
     }
 }
 
+fun getMinutesUntilArrival(arrivalTimeMillis: Long): String {
+    val now = Calendar.getInstance()
+    val arrivalToday = Calendar.getInstance().apply {
+        timeInMillis = arrivalTimeMillis
+        set(Calendar.YEAR, now.get(Calendar.YEAR))
+        set(Calendar.MONTH, now.get(Calendar.MONTH))
+        set(Calendar.DAY_OF_MONTH, now.get(Calendar.DAY_OF_MONTH))
+    }
+
+    if (arrivalToday.before(now)) {
+        // Si ya pasó hoy, asumimos que pasa mañana
+        arrivalToday.add(Calendar.DAY_OF_MONTH, 1)
+    }
+
+    val diffMillis = arrivalToday.timeInMillis - now.timeInMillis
+    val diffMinutes = (diffMillis / 1000 / 60).toInt()
+
+    return when {
+        diffMinutes > 1 -> "$diffMinutes minutos"
+        diffMinutes == 1 -> "1 minuto"
+        diffMinutes == 0 -> "0 minuto"
+        else -> "$diffMinutes minutos" // Por si acaso, aunque no debería pasar
+    }
+}
+
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun BusScheduleTopAppBar(
@@ -531,7 +549,8 @@ fun RouteScheduleScreenPreview() {
             },
             onBack = {},
             onHeaderNameClick = {},
-            onHeaderTimeClick = {}
+            onHeaderTimeClick = {},
+            searchQuery = ""
         )
     }
 }
